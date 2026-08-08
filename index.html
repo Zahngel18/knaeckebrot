@@ -70,9 +70,9 @@
   /* Spieltisch */
   #scr-game .wrap{padding:8px 10px; gap:6px;}
   .topbar{display:flex; align-items:center; gap:8px; font-size:.8rem; flex-wrap:wrap;}
-  .opps{display:flex; gap:8px; overflow-x:auto; padding:4px 0;}
+  .opps{display:flex; gap:6px; flex-wrap:wrap; justify-content:center; padding:4px 0; max-height:34vh; overflow-y:auto;}
   .opp{
-    flex:1; min-width:104px; background:rgba(0,0,0,.22); border-radius:12px; padding:6px;
+    flex:1 1 96px; min-width:96px; max-width:172px; background:rgba(0,0,0,.22); border-radius:12px; padding:6px;
     border:2px solid transparent;
   }
   .opp.turn{border-color:var(--accent); background:rgba(245,197,66,.12);}
@@ -153,7 +153,7 @@
     <button class="sec" id="btn-resume" style="display:none"></button>
     <button class="sec" id="btn-tut">❓ Regeln &amp; Tutorial</button>
     <div class="center" style="font-size:.75rem;color:var(--dim)">
-      Alle Mitspieler öffnen diese Seite auf ihrem Handy.<br>Einer startet das Spiel, die anderen geben den Code ein.
+      Alle Mitspieler öffnen diese Seite auf ihrem Handy.<br>Einer startet das Spiel, die anderen geben den Code ein.<br>2–12 Spieler.
     </div>
   </div>
 </div>
@@ -175,7 +175,10 @@
     </div>
     <div id="joker-info" class="center" style="display:none;font-size:.85rem;color:var(--dim)"></div>
     <div class="spacer"></div>
-    <button class="sec" id="btn-tut2">❓ Regeln &amp; Tutorial</button>
+    <div class="btnrow">
+      <button class="sec" id="btn-lobby-leave" style="width:46%">🚪 Menü</button>
+      <button class="sec" id="btn-tut2">❓ Regeln</button>
+    </div>
     <button id="btn-start" style="display:none" disabled>Spiel starten</button>
     <div class="center" id="lobby-hint" style="font-size:.8rem;color:var(--dim)"></div>
   </div>
@@ -190,6 +193,7 @@
       <span class="spacer"></span>
       <span class="badge"><span class="dot" id="conn-dot" style="display:inline-block;vertical-align:middle;margin-right:5px"></span><span id="conn-txt">…</span></span>
       <button class="mini sec" id="btn-tut3">❓</button>
+      <button class="mini sec" id="btn-game-leave">🚪</button>
     </div>
     <div class="opps" id="opps"></div>
     <div class="table-mid">
@@ -213,7 +217,7 @@
     <h2>🍞 So spielt ihr Knäckebrot</h2>
     <p><span class="k">Ziel:</span> Werde alle Karten los! Wer als Letzter noch Karten hat, ist das <b>Knäckebrot</b> 💩 und gibt die nächste Runde aus.</p>
     <hr>
-    <p><span class="k">Aufbau:</span> Jeder bekommt <b>3 verdeckte</b> Karten (nicht anschauen!), darauf <b>3 offene</b> Karten und <b>3 Handkarten</b>. Vor dem Start darfst du Handkarten mit deinen offenen Karten tauschen – gute Karten (2, 10, hohe Karten) legst du am besten offen hin.</p>
+    <p><span class="k">Aufbau:</span> 2–12 Spieler (ab 6 Spielern mit 2 Kartendecks, ab 11 mit 3). Jeder bekommt <b>3 verdeckte</b> Karten (nicht anschauen!), darauf <b>3 offene</b> Karten und <b>3 Handkarten</b>. Vor dem Start darfst du Handkarten mit deinen offenen Karten tauschen – gute Karten (2, 10, hohe Karten) legst du am besten offen hin.</p>
     <hr>
     <p><span class="k">Ablauf:</span> Reihum legst du eine Karte (oder mehrere <b>gleiche</b>) auf den Stapel. Sie muss <b>gleich hoch oder höher</b> sein als die oberste Karte. Danach ziehst du vom Nachziehstapel auf 3 Handkarten auf, solange er reicht.</p>
     <p>Kannst (oder willst) du nicht legen → <b>Stapel aufnehmen</b>, und der Nächste ist dran.</p>
@@ -252,8 +256,10 @@
     <h2 id="end-title">Spiel vorbei!</h2>
     <ol class="ranking" id="end-ranking" style="text-align:left"></ol>
     <div class="knck" id="end-knck"></div>
-    <button id="btn-rematch" style="display:none;margin-top:14px">🔁 Nochmal spielen</button>
+    <button id="btn-rematch" style="display:none;margin-top:14px">🔁 Nochmal – gleiche Runde</button>
+    <button class="sec" id="btn-tolobby" style="display:none;margin-top:8px">👥 Zurück zur Lobby (Spieler ändern)</button>
     <div id="end-wait" style="margin-top:14px;color:var(--dim);font-size:.9rem;display:none">Warte, ob der Host eine neue Runde startet …</div>
+    <button class="sec" id="btn-end-leave" style="margin-top:8px">🚪 Hauptmenü</button>
   </div>
 </div>
 
@@ -325,6 +331,7 @@ function pub(topic,obj,retain){ client && client.publish(topic, JSON.stringify(o
 function sendAct(a){ a.aid=uuid(); a.pid=ME_ID; if(IS_HOST){ handleAction(a); } else { pub(T_ACT(ROOM),a,false); } }
 
 /* ================= Host: Spiellogik ================= */
+const MAXP=12;             // so viele passen in eine Runde
 let HS=null;               // autoritativer Zustand (nur Host)
 const seenActs=[];
 function handleAction(a){
@@ -335,9 +342,24 @@ function handleAction(a){
   switch(a.type){
     case "join":
       if(p){ p.name=a.name||p.name; publishState(); break; }
-      if(HS.phase==="lobby" && HS.players.length<5){ HS.players.push(newPlayer(a.pid,a.name)); publishState(); }
+      if(HS.phase==="lobby" && HS.players.length<MAXP){ HS.players.push(newPlayer(a.pid,a.name)); publishState(); }
       else publishState(); // Zuschauer bekommt zumindest den Zustand
       break;
+    case "leave": {
+      const i=HS.players.findIndex(x=>x.id===a.pid);
+      if(i>=0){ HS.log=HS.players[i].name+" hat das Spiel verlassen 👋"; removePlayer(i); publishState(); }
+      break; }
+    case "kick": {
+      if(a.pid!==HS.hostId) break;
+      const i=HS.players.findIndex(x=>x.id===a.target);
+      if(i>=0 && HS.players[i].id!==HS.hostId){ HS.log=HS.players[i].name+" wurde entfernt"; removePlayer(i); publishState(); }
+      break; }
+    case "tolobby":
+      if(a.pid===HS.hostId){
+        HS.phase="lobby"; HS.ranks=[]; HS.knck=null; HS.jokerSwap=null; HS.pile=[]; HS.deck=[];
+        HS.players.forEach(x=>{ x.hand=[]; x.open=[]; x.blind=[]; x.ready=false; x.out=false; });
+        HS.log=""; publishState();
+      } break;
     case "swap":
       if(HS.phase==="swap" && p && !p.ready && p.hand[a.hi]!=null && p.open[a.oi]!=null){
         const t=p.hand[a.hi]; p.hand[a.hi]=p.open[a.oi]; p.open[a.oi]=t; publishState();
@@ -372,12 +394,31 @@ function handleAction(a){
   }
 }
 function newPlayer(id,name){ return {id, name:(name||"???").slice(0,14), hand:[], open:[], blind:[], ready:false, out:false}; }
+function deckCount(n){ return n>10?3:(n>5?2:1); }   // ab 6 Spielern mit 2 Kartendecks, ab 11 mit 3
 function makeDeck(){
-  const d=[];
-  for(let s=0;s<4;s++) for(let v=2;v<=14;v++) d.push({v,s});
-  if(HS.jokerOn) for(let i=0;i<3;i++) d.push({v:15,s:4});
+  const d=[], k=deckCount(HS.players.length);
+  for(let n=0;n<k;n++){
+    for(let s=0;s<4;s++) for(let v=2;v<=14;v++) d.push({v,s});
+    if(HS.jokerOn) for(let i=0;i<3;i++) d.push({v:15,s:4});
+  }
   for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
   return d;
+}
+function removePlayer(i){
+  const p=HS.players[i];
+  if(!p) return;
+  HS.ranks=(HS.ranks||[]).filter(n=>n!==p.name);
+  HS.players.splice(i,1);
+  if(HS.jokerSwap && !HS.players.some(x=>x.id===HS.jokerSwap.pid)) HS.jokerSwap=null;
+  if(HS.turn>i) HS.turn--;
+  if(HS.turn>=HS.players.length) HS.turn=0;
+  if(HS.phase==="swap"){
+    if(HS.players.length && HS.players.every(x=>x.ready)) beginPlay();
+  } else if(HS.phase==="play"){
+    if(!HS.players.length){ HS.phase="lobby"; return; }
+    if(activeCount()<=1) endGame();
+    else if(HS.players[HS.turn].out) advance();
+  }
 }
 function deal(){
   HS.deck=makeDeck(); HS.pile=[]; HS.ranks=[]; HS.jokerSwap=null;
@@ -517,8 +558,36 @@ let jokerPicks=[];
 function show(id){ document.querySelectorAll(".scr").forEach(s=>s.classList.remove("on")); $(id).classList.add("on"); }
 function myP(st){ return st.players.find(p=>p.id===ME_ID); }
 
+/* Raum verlassen und zurück ins Hauptmenü */
+function goHome(){
+  const room=ROOM;
+  if(client && room){ try{ client.unsubscribe(T_STATE(room)); client.unsubscribe(T_ACT(room)); }catch(e){} }
+  if(room) localStorage.removeItem("kb_host_"+room);
+  localStorage.removeItem("kb_last");
+  ROOM=null; IS_HOST=false; HS=null; S=null; sel=[]; jokerPicks=[]; swapPickHand=null; renderGame._wasMe=false;
+  document.querySelectorAll(".ovl").forEach(o=>o.classList.remove("on"));
+  $("btn-resume").style.display="none";
+  $("inp-code").value="";
+  show("scr-home");
+}
+/* Host schließt den Raum für alle */
+function hostClose(){
+  const room=ROOM;
+  if(HS){ HS.phase="closed"; publishState(); }
+  setTimeout(()=>{ try{ client && client.publish(T_STATE(room),"",{qos:1,retain:true}); }catch(e){} }, 700);
+  goHome();
+}
+function leaveRoom(){
+  if(IS_HOST){
+    if(confirm("Du bist der Host – wenn du gehst, wird die Runde für alle beendet. Wirklich zurück zum Menü?")) hostClose();
+  }else{
+    if(confirm("Zurück zum Hauptmenü? Du verlässt damit die Runde.")){ sendAct({type:"leave"}); setTimeout(goHome,250); }
+  }
+}
+
 function render(st){
   S=st;
+  if(st.phase==="closed"){ if(!IS_HOST){ toast("Der Host hat die Runde beendet."); goHome(); } return; }
   if(st.phase==="lobby"){ renderLobby(st); return; }
   if(st.phase==="end"){ renderGame(st); renderEnd(st); return; }
   $("ovl-end").classList.remove("on");
@@ -531,7 +600,15 @@ function renderLobby(st){
   const box=$("lobby-players"); box.innerHTML="";
   st.players.forEach((p,i)=>{
     const d=document.createElement("div"); d.className="pl";
-    d.innerHTML='<span class="dot ok"></span><b>'+esc(p.name)+'</b>'+(p.id===st.hostId?' <span class="badge">Host</span>':'')+(p.id===ME_ID?' <span style="color:var(--dim)">(du)</span>':'');
+    const t=document.createElement("span");
+    t.innerHTML='<span class="dot ok"></span><b>'+esc(p.name)+'</b>'+(p.id===st.hostId?' <span class="badge">Host</span>':'')+(p.id===ME_ID?' <span style="color:var(--dim)">(du)</span>':'');
+    d.appendChild(t);
+    const sp=document.createElement("span"); sp.className="spacer"; d.appendChild(sp);
+    if(IS_HOST && p.id!==ME_ID){
+      const x=document.createElement("button"); x.className="mini sec"; x.textContent="✕";
+      x.onclick=()=>{ if(confirm(p.name+" aus der Runde entfernen?")) sendAct({type:"kick", target:p.id}); };
+      d.appendChild(x);
+    }
     box.appendChild(d);
   });
   $("joker-row").style.display=IS_HOST?"flex":"none";
@@ -539,9 +616,10 @@ function renderLobby(st){
   $("joker-info").textContent="🃏 Joker: "+(st.jokerOn?"AN":"AUS")+" (stellt der Host ein)";
   $("btn-start").style.display=IS_HOST?"block":"none";
   $("btn-start").disabled=st.players.length<2;
+  const n=st.players.length, dc=deckCount(n);
   $("lobby-hint").textContent=IS_HOST
-    ? (st.players.length<2?"Warte auf Mitspieler … (2–5 Spieler)":"Bereit! Du kannst starten.")
-    : "Warte, bis der Host startet …";
+    ? (n<2?"Warte auf Mitspieler … (2–"+MAXP+" Spieler)":n+" Spieler · "+dc+" Kartendeck"+(dc>1?"s":"")+" · du kannst starten.")
+    : n+" Spieler in der Lobby – warte, bis der Host startet …";
 }
 function renderGame(st){
   show("scr-game");
@@ -731,9 +809,14 @@ function renderEnd(st){
   });
   $("end-knck").textContent="🍞💩 Knäckebrot: "+(st.knck||"–");
   $("btn-rematch").style.display=IS_HOST?"block":"none";
+  $("btn-tolobby").style.display=IS_HOST?"block":"none";
   $("end-wait").style.display=IS_HOST?"none":"block";
 }
 $("btn-rematch").onclick=()=>{ if(IS_HOST&&HS){ deal(); publishState(); } };
+$("btn-tolobby").onclick=()=>{ sendAct({type:"tolobby"}); };
+$("btn-end-leave").onclick=leaveRoom;
+$("btn-lobby-leave").onclick=leaveRoom;
+$("btn-game-leave").onclick=leaveRoom;
 
 /* ================= Start-Screen-Logik ================= */
 function myName(){
