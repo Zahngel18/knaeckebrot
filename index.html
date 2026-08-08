@@ -395,7 +395,15 @@ function mkCard(c, cls){
 
 /* ================= Identität ================= */
 const ME_ID = localStorage.kb_id || (localStorage.kb_id = uuid());
+
+/* Eingebettet in VAMOS: Name und Nutzer-ID kommen aus der App-Anmeldung.
+   Ohne diese Parameter läuft die Seite unverändert als eigenständiges Spiel. */
+const QP = new URLSearchParams(location.search);
+const VAMOS = QP.get("vamos") === "1" && window.parent !== window;
+const VAMOS_UID = Number(QP.get("uid")) > 0 ? Number(QP.get("uid")) : null;
+if(QP.get("name")) localStorage.kb_name = QP.get("name").slice(0,14);
 $("inp-name").value = localStorage.kb_name || "";
+if(VAMOS) $("inp-name").readOnly = true;
 
 /* ================= MQTT-Verbindung ================= */
 /* Der erste Buchstabe des Spiel-Codes bestimmt den Broker, damit alle auf demselben landen. */
@@ -446,8 +454,8 @@ function handleAction(a){
   const p=HS.players.find(x=>x.id===a.pid);
   switch(a.type){
     case "join":
-      if(p){ p.name=a.name||p.name; publishState(); break; }
-      if(HS.phase==="lobby" && HS.players.length<MAXP){ HS.players.push(newPlayer(a.pid,a.name)); publishState(); }
+      if(p){ p.name=a.name||p.name; if(a.uid) p.uid=a.uid; publishState(); break; }
+      if(HS.phase==="lobby" && HS.players.length<MAXP){ HS.players.push(newPlayer(a.pid,a.name,a.uid)); publishState(); }
       else publishState(); // Zuschauer bekommt zumindest den Zustand
       break;
     case "leave": {
@@ -498,7 +506,7 @@ function handleAction(a){
       break;
   }
 }
-function newPlayer(id,name){ return {id, name:(name||"???").slice(0,14), hand:[], open:[], blind:[], ready:false, out:false}; }
+function newPlayer(id,name,uid){ return {id, name:(name||"???").slice(0,14), uid:uid||null, hand:[], open:[], blind:[], ready:false, out:false}; }
 function deckCount(n){ return n>10?3:(n>5?2:1); }   // ab 6 Spielern mit 2 Kartendecks, ab 11 mit 3
 function makeDeck(){
   const d=[], k=deckCount(HS.players.length);
@@ -582,6 +590,7 @@ function finishCheck(p){
   }
 }
 function endGame(){
+  HS.endedAt=Date.now();
   const last=HS.players.find(p=>!p.out);
   if(last){ HS.ranks.push(last.name); HS.knck=last.name; }
   HS.phase="end";
@@ -929,6 +938,19 @@ $("btn-joker-do").onclick=()=>{ if(jokerPicks.length===2){ sendAct({type:"jokers
 $("btn-joker-skip").onclick=()=>{ jokerPicks=[]; $("ovl-joker").classList.remove("on"); sendAct({type:"jokerskip"}); };
 
 /* ===== Ende ===== */
+/* In VAMOS eingebettet: Endstand einmal pro Partie an die App melden (→ La Liga). */
+let sentResult=null;
+function reportToVamos(st){
+  if(!VAMOS) return;
+  const key=(st.code||ROOM||"?")+":"+(st.endedAt||0);
+  if(sentResult===key) return;
+  const byName=new Map();
+  for(const p of st.players){ if(p.uid) byName.set(p.name, p.uid); }
+  const ranking=(st.ranks||[]).map(n=>byName.get(n)).filter(u=>typeof u==="number");
+  if(ranking.length<2) return;
+  sentResult=key;
+  try{ parent.postMessage({type:"knaecke:result", key, ranking}, location.origin); }catch(e){}
+}
 function renderEnd(st){
   const o=$("ovl-end");
   if(!o.classList.contains("on")){ setTimeout(()=>confettiFx(true), 250); }   // Konfetti zur Siegerehrung
@@ -945,6 +967,7 @@ function renderEnd(st){
   $("btn-rematch").style.display=IS_HOST?"block":"none";
   $("btn-tolobby").style.display=IS_HOST?"block":"none";
   $("end-wait").style.display=IS_HOST?"none":"block";
+  reportToVamos(st);
 }
 $("btn-rematch").onclick=()=>{ if(IS_HOST&&HS){ deal(); publishState(); } };
 $("btn-tolobby").onclick=()=>{ sendAct({type:"tolobby"}); };
@@ -970,7 +993,7 @@ $("btn-create").onclick=()=>{
   connect(0,(c,bi)=>{
     ROOM=randCode(BROKERS[bi].key);
     HS={phase:"lobby", code:ROOM, jokerOn:$("chk-joker")?$("chk-joker").checked:true,
-        players:[newPlayer(ME_ID,n)], deck:[], pile:[], turn:0, ranks:[], log:"", jokerSwap:null};
+        players:[newPlayer(ME_ID,n,VAMOS_UID)], deck:[], pile:[], turn:0, ranks:[], log:"", jokerSwap:null};
     resubscribe();
     publishState();
     show("scr-lobby"); renderLobby(HS);
@@ -992,9 +1015,9 @@ function joinRoom(code,n){
     const iv=setInterval(()=>{
       if(S && S.players && S.players.some(p=>p.id===ME_ID)){ clearInterval(iv); return; }
       if(++tries>15){ clearInterval(iv); toast("Kein Spiel mit diesem Code gefunden 🤔"); return; }
-      pub(T_ACT(ROOM),{type:"join",aid:uuid(),pid:ME_ID,name:n},false);
+      pub(T_ACT(ROOM),{type:"join",aid:uuid(),pid:ME_ID,name:n,uid:VAMOS_UID},false);
     },1500);
-    pub(T_ACT(ROOM),{type:"join",aid:uuid(),pid:ME_ID,name:n},false);
+    pub(T_ACT(ROOM),{type:"join",aid:uuid(),pid:ME_ID,name:n,uid:VAMOS_UID},false);
     toast("Verbinde mit Spiel "+code+" …");
   });
   localStorage.kb_last=JSON.stringify({code,t:Date.now()});
@@ -1042,6 +1065,7 @@ $("btn-tut-close").onclick=()=>tut(false);
 <script>
 (function loadMqtt(){
   const urls=[
+    "vendor/mqtt.min.js",                                    // liegt neben dieser Datei – kein fremder Server nötig
     "https://unpkg.com/mqtt@5/dist/mqtt.min.js",
     "https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js",
     "https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"
