@@ -86,6 +86,7 @@
   }
   .pilewrap{position:relative;}
   .pilecnt{position:absolute; bottom:-8px; right:-8px; background:var(--accent); color:#3a2c00; font-size:.7rem; font-weight:800; border-radius:99px; padding:2px 7px;}
+  .effhint{position:absolute; top:calc(100% + 12px); left:50%; transform:translateX(-50%); font-size:.7rem; color:var(--dim); white-space:nowrap;}
   .deckwrap{position:relative;}
   #log{
     text-align:center; font-size:.82rem; color:var(--dim); min-height:2.4em; padding:0 6px;
@@ -167,7 +168,7 @@
     <div class="row" id="joker-row" style="display:none">
       <div>
         <b>🃏 Joker mitspielen</b>
-        <div style="font-size:.75rem;color:var(--dim)">Joker zählt wie eine 2 und erlaubt, offene Karten zu tauschen</div>
+        <div style="font-size:.75rem;color:var(--dim)">Zählt wie eine 2, erlaubt Tausch offener Karten, fliegt nach Gebrauch aus dem Spiel</div>
       </div>
       <div class="spacer"></div>
       <label class="switch"><input type="checkbox" id="chk-joker" checked><span></span></label>
@@ -220,9 +221,11 @@
     <hr>
     <p><span class="k">Spezialkarten:</span></p>
     <p>🂢 <b>2</b> – darf <b>immer</b> gelegt werden und setzt den Stapel zurück: Danach darf jede beliebige Karte gelegt werden.</p>
+    <p>🂣 <b>3</b> – ist <b>durchsichtig</b>: Sie darf immer gelegt werden, und für den Nächsten zählt die Karte <b>darunter</b> weiter.</p>
+    <p>🂧 <b>7</b> – <b>drunter legen!</b> Der Nächste muss eine 7 oder <b>niedriger</b> legen (Spezialkarten gehen immer).</p>
     <p>🂪 <b>10</b> – darf <b>immer</b> gelegt werden und <b>brennt den Stapel ab</b> (er kommt aus dem Spiel). Du darfst sofort nochmal legen!</p>
     <p>✨ <b>Vier gleiche</b> Karten oben auf dem Stapel brennen ihn ebenfalls ab.</p>
-    <p>🃏 <b>Joker</b> (falls aktiviert) – zählt wie eine 2. Zusätzlich darfst du nach dem Legen <b>zwei offene Karten auf dem Tisch tauschen</b> (z.&nbsp;B. eine deiner offenen gegen die eines Mitspielers).</p>
+    <p>🃏 <b>Joker</b> (falls aktiviert) – zählt wie eine 2. Zusätzlich darfst du nach dem Legen <b>zwei offene Karten auf dem Tisch tauschen</b> (z.&nbsp;B. eine deiner offenen gegen die eines Mitspielers). Ein einmal gelegter Joker <b>fliegt aus dem Spiel</b> – wer den Stapel aufnimmt, bekommt ihn nicht auf die Hand.</p>
     <hr>
     <p><span class="k">Endphase:</span> Sind Nachziehstapel <b>und</b> deine Hand leer, spielst du deine <b>offenen</b> Karten. Sind auch die weg, ziehst du <b>blind</b> eine deiner verdeckten Karten: Passt sie – Glück gehabt! Passt sie nicht, nimmst du den ganzen Stapel auf.</p>
     <p>Wer alle Karten los ist, ist raus. Der letzte Übriggebliebene ist das <b>Knäckebrot</b>! 🍞💩</p>
@@ -349,8 +352,9 @@ function handleAction(a){
     case "playBlind": doBlind(p,a); break;
     case "pickup":
       if(turnOf(p) && HS.pile.length && srcOf(p)!=="blind"){
-        p.hand.push(...HS.pile); HS.pile=[];
-        HS.log=p.name+" nimmt den Stapel auf 😬";
+        const jn=HS.pile.filter(c=>c.v===15).length;
+        p.hand.push(...HS.pile.filter(c=>c.v!==15)); HS.pile=[];
+        HS.log=p.name+" nimmt den Stapel auf 😬"+(jn?" (🃏 fliegt aus dem Spiel)":"");
         advance(); publishState();
       } break;
     case "jokerswap":
@@ -390,12 +394,23 @@ function beginPlay(){
   HS.turn=bi;
   HS.log=HS.players[bi].name+" beginnt (niedrigste Karte)!";
 }
-function topEff(){ // effektive oberste Karte (2/Joker = zurückgesetzt)
-  const t=HS.pile[HS.pile.length-1];
-  if(!t || t.v===2 || t.v===15) return 0;
-  return t.v;
+function effTop(pile){ // wirksame oberste Karte: 3 ist durchsichtig, 2/Joker setzen zurück, 7 = drunter legen
+  for(let i=pile.length-1;i>=0;i--){
+    const v=pile[i].v;
+    if(v===3) continue;
+    if(v===2||v===15) return {mode:"any"};
+    if(v===7) return {mode:"le", v:7};
+    return {mode:"ge", v};
+  }
+  return {mode:"any"};
 }
-function canBeat(v){ return v===2||v===10||v===15|| v>=topEff(); }
+function canPlayOn(v,pile){
+  if(v===2||v===3||v===10||v===15) return true;
+  const t=effTop(pile);
+  if(t.mode==="any") return true;
+  return t.mode==="le" ? v<=t.v : v>=t.v;
+}
+function canBeat(v){ return canPlayOn(v,HS.pile); }
 function turnOf(p){ return p && HS.phase==="play" && !HS.jokerSwap && HS.players[HS.turn] && HS.players[HS.turn].id===p.id; }
 function srcOf(p){ return p.hand.length?"hand":(HS.deck.length?"hand":(p.open.length?"open":"blind")); }
 function activeCount(){ return HS.players.filter(p=>!p.out).length; }
@@ -467,8 +482,9 @@ function doBlind(p,a){
     finishCheck(p);
     stayOrAdvance(p,{burn, joker:c.v===15 && !p.out});
   }else{
-    p.hand.push(...HS.pile, c); HS.pile=[];
-    HS.log=p.name+" zieht blind "+cardLabel(c)+" – passt nicht! Stapel aufgenommen 😩";
+    const jn=HS.pile.filter(x=>x.v===15).length;
+    p.hand.push(...HS.pile.filter(x=>x.v!==15), c); HS.pile=[];
+    HS.log=p.name+" zieht blind "+cardLabel(c)+" – passt nicht! Stapel aufgenommen 😩"+(jn?" (🃏 fliegt aus dem Spiel)":"");
     advance();
   }
   publishState();
@@ -558,6 +574,12 @@ function renderGame(st){
   const top=st.pile[st.pile.length-1];
   if(top){ pw.appendChild(mkCard(top,"mid")); const c=document.createElement("span"); c.className="pilecnt"; c.textContent=st.pile.length; pw.appendChild(c); }
   else { const ph=document.createElement("div"); ph.className="card mid"; ph.style.opacity=".25"; ph.innerHTML='<span class="pip">🔥</span>'; pw.appendChild(ph); }
+  if(st.phase==="play"){
+    const t=effTop(st.pile);
+    const eh=document.createElement("div"); eh.className="effhint";
+    eh.textContent = t.mode==="any" ? "alles erlaubt" : (t.mode==="le" ? "7: drunter legen (≤ 7)" : "≥ "+(t.v<=10?t.v:NAMES[t.v]));
+    pw.appendChild(eh);
+  }
   $("log").textContent=st.log||"";
 
   /* Banner */
@@ -655,11 +677,7 @@ function renderMe(st,me){
     ab.innerHTML='<div style="text-align:center;width:100%;color:var(--ok);font-weight:700;padding:6px">Du bist fertig! 🎉</div>';
   }
 }
-function beats(v,st){
-  const t=st.pile[st.pile.length-1];
-  const eff=(!t||t.v===2||t.v===15)?0:t.v;
-  return v===2||v===10||v===15||v>=eff;
-}
+function beats(v,st){ return canPlayOn(v,st.pile); }
 function toggleSel(i){
   const me=myP(S); if(!me) return;
   const src=me.hand.length?"hand":(S.deck.length?"hand":(me.open.length?"open":"blind"));
