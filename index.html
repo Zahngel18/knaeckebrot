@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#14532d">
+<title>Knäckebrot 🍞 – Online-Kartenspiel</title>
+<style>
+  :root{
+    --bg:#0f3d24; --bg2:#14532d; --felt:#1a6b3a; --card:#fdfdf8; --ink:#1c1c1c;
+    --red:#c62828; --gold:#f5c542; --line:rgba(255,255,255,.18); --txt:#f2f7f2;
+    --dim:rgba(242,247,242,.65); --accent:#f5c542; --danger:#ef5350; --ok:#66bb6a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(circle at 50% 20%, var(--felt) 0%, var(--bg) 75%);
+    color:var(--txt); min-height:100dvh; overscroll-behavior:none;
+  }
+  .scr{display:none; min-height:100dvh; flex-direction:column;}
+  .scr.on{display:flex;}
+  .wrap{width:100%; max-width:520px; margin:0 auto; padding:16px; flex:1; display:flex; flex-direction:column;}
+  h1{font-size:2rem; margin:.2em 0; text-align:center;}
+  h1 small{display:block; font-size:.9rem; font-weight:400; color:var(--dim);}
+  h2{font-size:1.1rem; margin:.6em 0 .3em;}
+  .center{text-align:center;}
+  button{
+    font:inherit; border:0; border-radius:14px; padding:14px 18px; font-weight:700;
+    background:var(--accent); color:#3a2c00; cursor:pointer; width:100%;
+  }
+  button:disabled{opacity:.35;}
+  button.sec{background:rgba(255,255,255,.12); color:var(--txt);}
+  button.warn{background:var(--danger); color:#fff;}
+  button.mini{width:auto; padding:8px 14px; font-size:.85rem; border-radius:10px;}
+  input[type=text]{
+    font:inherit; width:100%; padding:14px; border-radius:14px; border:1px solid var(--line);
+    background:rgba(0,0,0,.25); color:var(--txt); font-size:1.1rem; text-align:center;
+  }
+  input.code{letter-spacing:.4em; text-transform:uppercase; font-weight:700;}
+  .stack{display:flex; flex-direction:column; gap:12px;}
+  .row{display:flex; gap:10px; align-items:center;}
+  .spacer{flex:1;}
+  .badge{background:rgba(0,0,0,.3); border-radius:99px; padding:4px 12px; font-size:.8rem;}
+  .logo{font-size:3.2rem; text-align:center; margin-top:8vh;}
+
+  /* Karten */
+  .card{
+    width:58px; height:82px; border-radius:8px; background:var(--card); color:var(--ink);
+    position:relative; box-shadow:0 2px 5px rgba(0,0,0,.45); flex:none; user-select:none;
+    display:flex; align-items:center; justify-content:center; font-weight:800;
+    border:2px solid transparent; transition:transform .12s;
+  }
+  .card .cor{position:absolute; top:3px; left:5px; font-size:.78rem; line-height:1; text-align:left;}
+  .card .pip{font-size:1.7rem;}
+  .card.red{color:var(--red);}
+  .card.joker{color:#6a1b9a;}
+  .card.joker .pip{font-size:1.9rem;}
+  .card.sel{transform:translateY(-12px); border-color:var(--accent); box-shadow:0 0 0 2px var(--accent),0 6px 10px rgba(0,0,0,.5);}
+  .card.back{background:repeating-linear-gradient(45deg,#7a1f2b 0 6px,#8d2b38 6px 12px); border:3px solid #fdfdf8;}
+  .card.mini{width:30px; height:43px; border-radius:5px;}
+  .card.mini .cor{display:none;}
+  .card.mini .pip{font-size:.95rem;}
+  .card.mid{width:44px; height:62px;}
+  .card.mid .pip{font-size:1.2rem;} .card.mid .cor{font-size:.65rem;}
+  .card.disabled{opacity:.45;}
+  .fan{display:flex; flex-wrap:wrap; gap:6px; justify-content:center;}
+  .hand-scroll{display:flex; gap:6px; overflow-x:auto; padding:14px 4px 6px; -webkit-overflow-scrolling:touch;}
+
+  /* Spieltisch */
+  #scr-game .wrap{padding:8px 10px; gap:6px;}
+  .topbar{display:flex; align-items:center; gap:8px; font-size:.8rem; flex-wrap:wrap;}
+  .opps{display:flex; gap:8px; overflow-x:auto; padding:4px 0;}
+  .opp{
+    flex:1; min-width:104px; background:rgba(0,0,0,.22); border-radius:12px; padding:6px;
+    border:2px solid transparent;
+  }
+  .opp.turn{border-color:var(--accent); background:rgba(245,197,66,.12);}
+  .opp .nm{font-size:.8rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .opp .cnt{font-size:.7rem; color:var(--dim);}
+  .opp .cards{display:flex; gap:3px; margin-top:4px;}
+  .opp.out{opacity:.55;}
+  .table-mid{
+    display:flex; align-items:center; justify-content:center; gap:18px; padding:10px 0;
+    min-height:110px;
+  }
+  .pilewrap{position:relative;}
+  .pilecnt{position:absolute; bottom:-8px; right:-8px; background:var(--accent); color:#3a2c00; font-size:.7rem; font-weight:800; border-radius:99px; padding:2px 7px;}
+  .deckwrap{position:relative;}
+  #log{
+    text-align:center; font-size:.82rem; color:var(--dim); min-height:2.4em; padding:0 6px;
+  }
+  #turnbanner{
+    text-align:center; font-weight:800; border-radius:12px; padding:8px; font-size:.95rem;
+    background:rgba(0,0,0,.25);
+  }
+  #turnbanner.me{background:var(--accent); color:#3a2c00; animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
+  .myarea{background:rgba(0,0,0,.22); border-radius:16px 16px 0 0; padding:8px 8px calc(10px + env(safe-area-inset-bottom)); margin:0 -10px;}
+  .mytable{display:flex; gap:14px; justify-content:center; margin-bottom:4px;}
+  .mytable .grp{text-align:center;}
+  .mytable .lbl{font-size:.62rem; color:var(--dim); text-transform:uppercase; letter-spacing:.06em;}
+  .mytable .cards{display:flex; gap:5px; margin-top:3px;}
+  .btnrow{display:flex; gap:8px; margin-top:8px;}
+
+  /* Overlays */
+  .ovl{position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:flex-end; justify-content:center; z-index:50;}
+  .ovl.on{display:flex;}
+  .sheet{
+    background:var(--bg2); width:100%; max-width:520px; max-height:88dvh; overflow-y:auto;
+    border-radius:22px 22px 0 0; padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .sheet h2{margin-top:0;}
+  .tut p{font-size:.92rem; line-height:1.5; margin:.5em 0;}
+  .tut .k{color:var(--accent); font-weight:700;}
+  .tut hr{border:0; border-top:1px solid var(--line); margin:14px 0;}
+  #toast{
+    position:fixed; top:12px; left:50%; transform:translateX(-50%); background:#000c;
+    color:#fff; padding:10px 18px; border-radius:12px; font-size:.9rem; z-index:99;
+    display:none; max-width:90vw; text-align:center;
+  }
+  .lobbylist{display:flex; flex-direction:column; gap:8px;}
+  .lobbylist .pl{background:rgba(0,0,0,.22); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;}
+  .dot{width:10px; height:10px; border-radius:50%; background:var(--danger); flex:none;}
+  .dot.ok{background:var(--ok);}
+  .switch{position:relative; width:52px; height:30px; flex:none;}
+  .switch input{display:none;}
+  .switch span{position:absolute; inset:0; background:rgba(0,0,0,.4); border-radius:99px; transition:.2s;}
+  .switch span:before{content:""; position:absolute; width:24px; height:24px; border-radius:50%; background:#fff; top:3px; left:3px; transition:.2s;}
+  .switch input:checked + span{background:var(--ok);}
+  .switch input:checked + span:before{left:25px;}
+  .codebig{font-size:2.4rem; letter-spacing:.35em; font-weight:800; text-align:center; margin:.2em 0; color:var(--accent);}
+  .rank1{font-size:1.3rem;}
+  .knck{font-size:1.15rem; color:var(--danger); font-weight:800;}
+  .swapsel{outline:3px solid var(--accent); border-radius:8px;}
+  ol.ranking{font-size:1.05rem; line-height:1.9;}
+</style>
+</head>
+<body>
+
+<!-- ===== START ===== -->
+<div class="scr on" id="scr-home">
+  <div class="wrap stack">
+    <div class="logo">🍞🃏</div>
+    <h1>Knäckebrot<small>(Shithead) – online mit Freunden</small></h1>
+    <input type="text" id="inp-name" maxlength="14" placeholder="Dein Name">
+    <button id="btn-create">Neues Spiel starten</button>
+    <div class="row">
+      <input type="text" class="code" id="inp-code" maxlength="5" placeholder="CODE" autocapitalize="characters">
+      <button id="btn-join" style="width:44%">Beitreten</button>
+    </div>
+    <button class="sec" id="btn-resume" style="display:none"></button>
+    <button class="sec" id="btn-tut">❓ Regeln &amp; Tutorial</button>
+    <div class="center" style="font-size:.75rem;color:var(--dim)">
+      Alle Mitspieler öffnen diese Seite auf ihrem Handy.<br>Einer startet das Spiel, die anderen geben den Code ein.
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOBBY ===== -->
+<div class="scr" id="scr-lobby">
+  <div class="wrap stack">
+    <h1 style="font-size:1.4rem">Lobby</h1>
+    <div class="center" style="color:var(--dim);font-size:.85rem">Spiel-Code für deine Freunde:</div>
+    <div class="codebig" id="lobby-code"></div>
+    <div class="lobbylist" id="lobby-players"></div>
+    <div class="row" id="joker-row" style="display:none">
+      <div>
+        <b>🃏 Joker mitspielen</b>
+        <div style="font-size:.75rem;color:var(--dim)">Joker zählt wie eine 2 und erlaubt, offene Karten zu tauschen</div>
+      </div>
+      <div class="spacer"></div>
+      <label class="switch"><input type="checkbox" id="chk-joker" checked><span></span></label>
+    </div>
+    <div id="joker-info" class="center" style="display:none;font-size:.85rem;color:var(--dim)"></div>
+    <div class="spacer"></div>
+    <button class="sec" id="btn-tut2">❓ Regeln &amp; Tutorial</button>
+    <button id="btn-start" style="display:none" disabled>Spiel starten</button>
+    <div class="center" id="lobby-hint" style="font-size:.8rem;color:var(--dim)"></div>
+  </div>
+</div>
+
+<!-- ===== SPIEL ===== -->
+<div class="scr" id="scr-game">
+  <div class="wrap">
+    <div class="topbar">
+      <span class="badge" id="g-code"></span>
+      <span class="badge" id="g-joker"></span>
+      <span class="spacer"></span>
+      <span class="badge"><span class="dot" id="conn-dot" style="display:inline-block;vertical-align:middle;margin-right:5px"></span><span id="conn-txt">…</span></span>
+      <button class="mini sec" id="btn-tut3">❓</button>
+    </div>
+    <div class="opps" id="opps"></div>
+    <div class="table-mid">
+      <div class="deckwrap" id="deckwrap"></div>
+      <div class="pilewrap" id="pilewrap"></div>
+    </div>
+    <div id="log"></div>
+    <div id="turnbanner"></div>
+    <div class="spacer"></div>
+    <div class="myarea">
+      <div class="mytable" id="mytable"></div>
+      <div class="hand-scroll" id="myhand"></div>
+      <div class="btnrow" id="actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TUTORIAL ===== -->
+<div class="ovl" id="ovl-tut">
+  <div class="sheet tut">
+    <h2>🍞 So spielt ihr Knäckebrot</h2>
+    <p><span class="k">Ziel:</span> Werde alle Karten los! Wer als Letzter noch Karten hat, ist das <b>Knäckebrot</b> 💩 und gibt die nächste Runde aus.</p>
+    <hr>
+    <p><span class="k">Aufbau:</span> Jeder bekommt <b>3 verdeckte</b> Karten (nicht anschauen!), darauf <b>3 offene</b> Karten und <b>3 Handkarten</b>. Vor dem Start darfst du Handkarten mit deinen offenen Karten tauschen – gute Karten (2, 10, hohe Karten) legst du am besten offen hin.</p>
+    <hr>
+    <p><span class="k">Ablauf:</span> Reihum legst du eine Karte (oder mehrere <b>gleiche</b>) auf den Stapel. Sie muss <b>gleich hoch oder höher</b> sein als die oberste Karte. Danach ziehst du vom Nachziehstapel auf 3 Handkarten auf, solange er reicht.</p>
+    <p>Kannst (oder willst) du nicht legen → <b>Stapel aufnehmen</b>, und der Nächste ist dran.</p>
+    <p>Reihenfolge: 3 &lt; 4 &lt; … &lt; 10 &lt; Bube &lt; Dame &lt; König &lt; Ass</p>
+    <hr>
+    <p><span class="k">Spezialkarten:</span></p>
+    <p>🂢 <b>2</b> – darf <b>immer</b> gelegt werden und setzt den Stapel zurück: Danach darf jede beliebige Karte gelegt werden.</p>
+    <p>🂪 <b>10</b> – darf <b>immer</b> gelegt werden und <b>brennt den Stapel ab</b> (er kommt aus dem Spiel). Du darfst sofort nochmal legen!</p>
+    <p>✨ <b>Vier gleiche</b> Karten oben auf dem Stapel brennen ihn ebenfalls ab.</p>
+    <p>🃏 <b>Joker</b> (falls aktiviert) – zählt wie eine 2. Zusätzlich darfst du nach dem Legen <b>zwei offene Karten auf dem Tisch tauschen</b> (z.&nbsp;B. eine deiner offenen gegen die eines Mitspielers).</p>
+    <hr>
+    <p><span class="k">Endphase:</span> Sind Nachziehstapel <b>und</b> deine Hand leer, spielst du deine <b>offenen</b> Karten. Sind auch die weg, ziehst du <b>blind</b> eine deiner verdeckten Karten: Passt sie – Glück gehabt! Passt sie nicht, nimmst du den ganzen Stapel auf.</p>
+    <p>Wer alle Karten los ist, ist raus. Der letzte Übriggebliebene ist das <b>Knäckebrot</b>! 🍞💩</p>
+    <button id="btn-tut-close" style="margin-top:10px">Alles klar!</button>
+  </div>
+</div>
+
+<!-- ===== JOKER-TAUSCH ===== -->
+<div class="ovl" id="ovl-joker">
+  <div class="sheet">
+    <h2>🃏 Joker! Offene Karten tauschen?</h2>
+    <p style="font-size:.9rem;color:var(--dim)">Wähle <b>zwei</b> offene Karten, die die Plätze tauschen sollen (z.&nbsp;B. deine gegen die eines Mitspielers) – oder überspringe.</p>
+    <div id="joker-grid" class="stack"></div>
+    <div class="btnrow" style="margin-top:14px">
+      <button class="sec" id="btn-joker-skip">Überspringen</button>
+      <button id="btn-joker-do" disabled>Tauschen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ENDE ===== -->
+<div class="ovl" id="ovl-end">
+  <div class="sheet center">
+    <h2 id="end-title">Spiel vorbei!</h2>
+    <ol class="ranking" id="end-ranking" style="text-align:left"></ol>
+    <div class="knck" id="end-knck"></div>
+    <button id="btn-rematch" style="display:none;margin-top:14px">🔁 Nochmal spielen</button>
+    <div id="end-wait" style="margin-top:14px;color:var(--dim);font-size:.9rem;display:none">Warte, ob der Host eine neue Runde startet …</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ================= Hilfen ================= */
+const $=id=>document.getElementById(id);
+const SUITS=["♠","♥","♦","♣"];
+const NAMES={11:"B",12:"D",13:"K",14:"A"};
+const uuid=()=> (crypto.randomUUID?crypto.randomUUID():('xxxx-xxxx-xxxx'.replace(/x/g,()=>Math.floor(Math.random()*16).toString(16))+Date.now()));
+function toast(msg,ms){ const t=$("toast"); t.textContent=msg; t.style.display="block"; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display="none",ms||2600); }
+function vib(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
+let wakeLock=null;
+async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ keepAwake(); } });
+
+function cardLabel(c){ return c.v===15?"🃏 Joker":( (c.v<=10?c.v:NAMES[c.v]) + SUITS[c.s] ); }
+function mkCard(c, cls){
+  const d=document.createElement("div");
+  d.className="card "+(cls||"");
+  if(c===null){ d.classList.add("back"); return d; }
+  if(c.v===15){ d.classList.add("joker"); d.innerHTML='<span class="pip">🃏</span>'; return d; }
+  const r=(c.s===1||c.s===2); if(r) d.classList.add("red");
+  const v=c.v<=10?c.v:NAMES[c.v];
+  d.innerHTML='<span class="cor">'+v+'<br>'+SUITS[c.s]+'</span><span class="pip">'+SUITS[c.s]+'</span>';
+  return d;
+}
+
+/* ================= Identität ================= */
+const ME_ID = localStorage.kb_id || (localStorage.kb_id = uuid());
+$("inp-name").value = localStorage.kb_name || "";
+
+/* ================= MQTT-Verbindung ================= */
+/* Der erste Buchstabe des Spiel-Codes bestimmt den Broker, damit alle auf demselben landen. */
+const BROKERS=[
+  {key:"K", url:"wss://broker.emqx.io:8084/mqtt"},
+  {key:"H", url:"wss://broker.hivemq.com:8884/mqtt"},
+  {key:"M", url:"wss://test.mosquitto.org:8081/mqtt"}
+];
+let client=null, ROOM=null, IS_HOST=false;
+const T_STATE=c=>"kb26/"+c+"/s", T_ACT=c=>"kb26/"+c+"/a";
+
+function setConn(ok,txt){ $("conn-dot").classList.toggle("ok",!!ok); $("conn-txt").textContent=txt; }
+
+function connect(brokerIdx, onReady, tryNext){
+  const b=BROKERS[brokerIdx];
+  if(!b){ toast("Keine Verbindung zu einem Spiel-Server möglich 😕 – Internet prüfen und neu laden."); return; }
+  setConn(false,"verbinde…");
+  const c=mqtt.connect(b.url,{ clientId:"kb_"+ME_ID.slice(0,8)+"_"+Math.random().toString(16).slice(2,8),
+    keepalive:25, reconnectPeriod:2500, connectTimeout:7000, clean:true });
+  let opened=false;
+  c.on("connect",()=>{ opened=true; setConn(true,"online"); if(onReady){ const f=onReady; onReady=null; f(c,brokerIdx); } else resubscribe(); });
+  c.on("reconnect",()=>setConn(false,"verbinde…"));
+  c.on("offline",()=>setConn(false,"offline"));
+  c.on("error",()=>{ if(!opened && tryNext){ c.end(true); connect(brokerIdx+1,onReady,true); tryNext=null; } });
+  setTimeout(()=>{ if(!opened && tryNext){ c.end(true); connect(brokerIdx+1,onReady,true); tryNext=null; } },8000);
+  c.on("message",(topic,payload)=>{ try{ onMsg(topic, JSON.parse(payload.toString())); }catch(e){} });
+  client=c;
+}
+function resubscribe(){
+  if(!ROOM) return;
+  client.subscribe(T_STATE(ROOM),{qos:1});
+  if(IS_HOST) client.subscribe(T_ACT(ROOM),{qos:1});
+  if(IS_HOST && HS) publishState();
+}
+function pub(topic,obj,retain){ client && client.publish(topic, JSON.stringify(obj), {qos:1, retain:!!retain}); }
+function sendAct(a){ a.aid=uuid(); a.pid=ME_ID; if(IS_HOST){ handleAction(a); } else { pub(T_ACT(ROOM),a,false); } }
+
+/* ================= Host: Spiellogik ================= */
+let HS=null;               // autoritativer Zustand (nur Host)
+const seenActs=[];
+function handleAction(a){
+  if(!HS || !a || !a.aid) return;
+  if(seenActs.includes(a.aid)) return;
+  seenActs.push(a.aid); if(seenActs.length>80) seenActs.shift();
+  const p=HS.players.find(x=>x.id===a.pid);
+  switch(a.type){
+    case "join":
+      if(p){ p.name=a.name||p.name; publishState(); break; }
+      if(HS.phase==="lobby" && HS.players.length<5){ HS.players.push(newPlayer(a.pid,a.name)); publishState(); }
+      else publishState(); // Zuschauer bekommt zumindest den Zustand
+      break;
+    case "swap":
+      if(HS.phase==="swap" && p && !p.ready && p.hand[a.hi]!=null && p.open[a.oi]!=null){
+        const t=p.hand[a.hi]; p.hand[a.hi]=p.open[a.oi]; p.open[a.oi]=t; publishState();
+      } break;
+    case "ready":
+      if(HS.phase==="swap" && p && !p.ready){ p.ready=true;
+        if(HS.players.every(x=>x.ready)) beginPlay();
+        publishState();
+      } break;
+    case "play":      doPlay(p,a,"hand"); break;
+    case "playOpen":  doPlay(p,a,"open"); break;
+    case "playBlind": doBlind(p,a); break;
+    case "pickup":
+      if(turnOf(p) && HS.pile.length && srcOf(p)!=="blind"){
+        p.hand.push(...HS.pile); HS.pile=[];
+        HS.log=p.name+" nimmt den Stapel auf 😬";
+        advance(); publishState();
+      } break;
+    case "jokerswap":
+      if(HS.jokerSwap && HS.jokerSwap.pid===a.pid){
+        const pa=HS.players.find(x=>x.id===a.a.pid), pb=HS.players.find(x=>x.id===a.b.pid);
+        if(pa&&pb&&pa.open[a.a.idx]!=null&&pb.open[a.b.idx]!=null&&!(a.a.pid===a.b.pid&&a.a.idx===a.b.idx)){
+          const t=pa.open[a.a.idx]; pa.open[a.a.idx]=pb.open[a.b.idx]; pb.open[a.b.idx]=t;
+          HS.log=(p?p.name:"?")+" tauscht per Joker "+cardLabel(pa.open[a.a.idx])+" ↔ "+cardLabel(pb.open[a.b.idx]);
+        }
+        HS.jokerSwap=null; advance(); publishState();
+      } break;
+    case "jokerskip":
+      if(HS.jokerSwap && HS.jokerSwap.pid===a.pid){ HS.jokerSwap=null; advance(); publishState(); }
+      break;
+  }
+}
+function newPlayer(id,name){ return {id, name:(name||"???").slice(0,14), hand:[], open:[], blind:[], ready:false, out:false}; }
+function makeDeck(){
+  const d=[];
+  for(let s=0;s<4;s++) for(let v=2;v<=14;v++) d.push({v,s});
+  if(HS.jokerOn) for(let i=0;i<3;i++) d.push({v:15,s:4});
+  for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
+  return d;
+}
+function deal(){
+  HS.deck=makeDeck(); HS.pile=[]; HS.ranks=[]; HS.jokerSwap=null;
+  for(const p of HS.players){ p.ready=false; p.out=false;
+    p.blind=HS.deck.splice(0,3); p.open=HS.deck.splice(0,3); p.hand=HS.deck.splice(0,3); }
+  HS.phase="swap";
+  HS.log="Tauschphase: Handkarten mit offenen Karten tauschen, dann „Bereit“ drücken.";
+}
+function beginPlay(){
+  HS.phase="play";
+  // Startspieler: niedrigste normale Handkarte
+  let best=99, bi=0;
+  HS.players.forEach((p,i)=>{ for(const c of p.hand){ const v=(c.v===2||c.v===10||c.v===15)?98:c.v; if(v<best){best=v;bi=i;} } });
+  HS.turn=bi;
+  HS.log=HS.players[bi].name+" beginnt (niedrigste Karte)!";
+}
+function topEff(){ // effektive oberste Karte (2/Joker = zurückgesetzt)
+  const t=HS.pile[HS.pile.length-1];
+  if(!t || t.v===2 || t.v===15) return 0;
+  return t.v;
+}
+function canBeat(v){ return v===2||v===10||v===15|| v>=topEff(); }
+function turnOf(p){ return p && HS.phase==="play" && !HS.jokerSwap && HS.players[HS.turn] && HS.players[HS.turn].id===p.id; }
+function srcOf(p){ return p.hand.length?"hand":(HS.deck.length?"hand":(p.open.length?"open":"blind")); }
+function activeCount(){ return HS.players.filter(p=>!p.out).length; }
+function advance(){
+  if(activeCount()<=1){ endGame(); return; }
+  let i=HS.turn;
+  do{ i=(i+1)%HS.players.length; }while(HS.players[i].out);
+  HS.turn=i;
+}
+function stayOrAdvance(p,{burn,joker}){
+  if(activeCount()<=1){ endGame(); return; }
+  if(p.out){ if(HS.players[HS.turn].id===p.id) advance(); return; }
+  if(burn){ /* selber Spieler nochmal */ return; }
+  if(joker && HS.players.some(x=>x.open.length)){ HS.jokerSwap={pid:p.id}; return; }
+  advance();
+}
+function burnPile(){ HS.pile=[]; }
+function finishCheck(p){
+  if(!p.out && p.hand.length===0 && p.open.length===0 && p.blind.length===0 && HS.deck.length===0){
+    p.out=true; HS.ranks.push(p.name);
+    HS.log=p.name+" ist fertig! 🎉";
+  }
+}
+function endGame(){
+  const last=HS.players.find(p=>!p.out);
+  if(last){ HS.ranks.push(last.name); HS.knck=last.name; }
+  HS.phase="end";
+}
+function doPlay(p,a,src){
+  if(!turnOf(p) || !Array.isArray(a.idxs) || !a.idxs.length) return;
+  if(srcOf(p)!==src) return;
+  const arr=src==="hand"?p.hand:p.open;
+  const idxs=[...new Set(a.idxs)].filter(i=>arr[i]!=null);
+  if(idxs.length!==a.idxs.length) return;
+  const cards=idxs.map(i=>arr[i]);
+  if(!cards.every(c=>c.v===cards[0].v)) return;
+  if(!canBeat(cards[0].v)) return;
+  idxs.sort((x,y)=>y-x).forEach(i=>arr.splice(i,1));
+  HS.pile.push(...cards);
+  const isJoker=cards[0].v===15;
+  HS.log=p.name+" legt "+cards.map(cardLabel).join(", ");
+  if(src==="hand"){ while(p.hand.length<3 && HS.deck.length) p.hand.push(HS.deck.shift()); }
+  let burn=false;
+  if(cards[0].v===10){ burn=true; HS.log+=" – 🔥 Stapel brennt ab!"; }
+  else if(HS.pile.length>=4){
+    const n=HS.pile.length;
+    if(HS.pile[n-1].v===HS.pile[n-2].v&&HS.pile[n-2].v===HS.pile[n-3].v&&HS.pile[n-3].v===HS.pile[n-4].v){
+      burn=true; HS.log+=" – ✨ Vier gleiche: Stapel brennt ab!";
+    }
+  }
+  if(burn) burnPile();
+  finishCheck(p);
+  stayOrAdvance(p,{burn, joker:isJoker && !p.out});
+  publishState();
+}
+function doBlind(p,a){
+  if(!turnOf(p) || srcOf(p)!=="blind" || p.blind[a.i]==null) return;
+  const c=p.blind.splice(a.i,1)[0];
+  if(canBeat(c.v)){
+    HS.pile.push(c);
+    HS.log=p.name+" zieht blind "+cardLabel(c)+" – passt!";
+    let burn=false;
+    if(c.v===10){ burn=true; HS.log+=" 🔥 Stapel brennt ab!"; }
+    else if(HS.pile.length>=4){
+      const n=HS.pile.length;
+      if(HS.pile[n-1].v===HS.pile[n-2].v&&HS.pile[n-2].v===HS.pile[n-3].v&&HS.pile[n-3].v===HS.pile[n-4].v){ burn=true; HS.log+=" ✨ Stapel brennt ab!"; }
+    }
+    if(burn) burnPile();
+    finishCheck(p);
+    stayOrAdvance(p,{burn, joker:c.v===15 && !p.out});
+  }else{
+    p.hand.push(...HS.pile, c); HS.pile=[];
+    HS.log=p.name+" zieht blind "+cardLabel(c)+" – passt nicht! Stapel aufgenommen 😩";
+    advance();
+  }
+  publishState();
+}
+let stateVersion=0;
+function publishState(){
+  if(!HS) return;
+  HS.v=++stateVersion; HS.hostId=ME_ID;
+  pub(T_STATE(ROOM), HS, true);
+  localStorage["kb_host_"+ROOM]=JSON.stringify({t:Date.now(), hs:HS, sv:stateVersion});
+  render(HS);
+}
+
+/* ================= Nachrichten ================= */
+let S=null;
+function onMsg(topic,msg){
+  if(topic===T_ACT(ROOM)){ if(IS_HOST) handleAction(msg); return; }
+  if(topic===T_STATE(ROOM)){
+    if(IS_HOST) return;               // Host rendert seinen eigenen Zustand
+    if(S && msg.v<S.v) return;        // veraltet
+    S=msg; render(S);
+  }
+}
+
+/* ================= Client-Aktionen / UI ================= */
+let sel=[];          // ausgewählte Indizes (Hand oder offen)
+let swapPickHand=null;
+let jokerPicks=[];
+
+function show(id){ document.querySelectorAll(".scr").forEach(s=>s.classList.remove("on")); $(id).classList.add("on"); }
+function myP(st){ return st.players.find(p=>p.id===ME_ID); }
+
+function render(st){
+  S=st;
+  if(st.phase==="lobby"){ renderLobby(st); return; }
+  if(st.phase==="end"){ renderGame(st); renderEnd(st); return; }
+  $("ovl-end").classList.remove("on");
+  renderGame(st);
+}
+function renderLobby(st){
+  show("scr-lobby");
+  $("ovl-end").classList.remove("on");
+  $("lobby-code").textContent=ROOM;
+  const box=$("lobby-players"); box.innerHTML="";
+  st.players.forEach((p,i)=>{
+    const d=document.createElement("div"); d.className="pl";
+    d.innerHTML='<span class="dot ok"></span><b>'+esc(p.name)+'</b>'+(p.id===st.hostId?' <span class="badge">Host</span>':'')+(p.id===ME_ID?' <span style="color:var(--dim)">(du)</span>':'');
+    box.appendChild(d);
+  });
+  $("joker-row").style.display=IS_HOST?"flex":"none";
+  $("joker-info").style.display=IS_HOST?"none":"block";
+  $("joker-info").textContent="🃏 Joker: "+(st.jokerOn?"AN":"AUS")+" (stellt der Host ein)";
+  $("btn-start").style.display=IS_HOST?"block":"none";
+  $("btn-start").disabled=st.players.length<2;
+  $("lobby-hint").textContent=IS_HOST
+    ? (st.players.length<2?"Warte auf Mitspieler … (2–5 Spieler)":"Bereit! Du kannst starten.")
+    : "Warte, bis der Host startet …";
+}
+function renderGame(st){
+  show("scr-game");
+  const me=myP(st);
+  $("g-code").textContent="🔑 "+ROOM;
+  $("g-joker").textContent="🃏 "+(st.jokerOn?"an":"aus");
+
+  /* Gegner */
+  const opps=$("opps"); opps.innerHTML="";
+  st.players.forEach((p,i)=>{
+    if(p.id===ME_ID) return;
+    const d=document.createElement("div");
+    d.className="opp"+(st.phase==="play"&&st.turn===i&&!p.out?" turn":"")+(p.out?" out":"");
+    const nm=document.createElement("div"); nm.className="nm"; nm.textContent=(p.out?"✅ ":"")+p.name; d.appendChild(nm);
+    const cnt=document.createElement("div"); cnt.className="cnt";
+    cnt.textContent="✋ "+p.hand.length+"  🂠 "+p.blind.length+(st.phase==="swap"?(p.ready?" · bereit ✔":" · tauscht…"):"");
+    d.appendChild(cnt);
+    const cs=document.createElement("div"); cs.className="cards";
+    p.open.forEach(c=>cs.appendChild(mkCard(c,"mini")));
+    d.appendChild(cs);
+    opps.appendChild(d);
+  });
+
+  /* Mitte */
+  const dw=$("deckwrap"); dw.innerHTML="";
+  if(st.deck.length){ const b=mkCard(null,"mid"); dw.appendChild(b);
+    const c=document.createElement("span"); c.className="pilecnt"; c.textContent=st.deck.length; dw.appendChild(c); }
+  else dw.innerHTML='<span style="font-size:.7rem;color:var(--dim)">Stapel<br>leer</span>';
+  const pw=$("pilewrap"); pw.innerHTML="";
+  const top=st.pile[st.pile.length-1];
+  if(top){ pw.appendChild(mkCard(top,"mid")); const c=document.createElement("span"); c.className="pilecnt"; c.textContent=st.pile.length; pw.appendChild(c); }
+  else { const ph=document.createElement("div"); ph.className="card mid"; ph.style.opacity=".25"; ph.innerHTML='<span class="pip">🔥</span>'; pw.appendChild(ph); }
+  $("log").textContent=st.log||"";
+
+  /* Banner */
+  const tb=$("turnbanner"); tb.classList.remove("me");
+  if(st.phase==="swap"){
+    tb.textContent = me ? (me.ready?"Warte auf die anderen …":"Tauschphase: Hand ↔ offene Karten") : "Tauschphase läuft";
+  } else if(st.phase==="play"){
+    const tp=st.players[st.turn];
+    if(st.jokerSwap){ const jp=st.players.find(p=>p.id===st.jokerSwap.pid);
+      tb.textContent="🃏 "+(jp?jp.name:"?")+" überlegt, Karten zu tauschen …"; }
+    else if(tp && tp.id===ME_ID){ tb.textContent="🔥 DU BIST DRAN!"; tb.classList.add("me");
+      if(!renderGame._wasMe){ vib([120,60,120]); } renderGame._wasMe=true; }
+    else { tb.textContent="⏳ "+(tp?tp.name:"?")+" ist dran"; renderGame._wasMe=false; }
+  } else { tb.textContent="Spiel beendet"; }
+
+  /* Mein Bereich */
+  renderMe(st,me);
+  /* Joker-Overlay */
+  if(st.jokerSwap && st.jokerSwap.pid===ME_ID){ openJokerModal(st); } else { $("ovl-joker").classList.remove("on"); jokerPicks=[]; }
+}
+function renderMe(st,me){
+  const mt=$("mytable"), mh=$("myhand"), ab=$("actions");
+  mt.innerHTML=""; mh.innerHTML=""; ab.innerHTML="";
+  if(!me){ mt.innerHTML='<div style="color:var(--dim);font-size:.85rem;padding:10px">Du schaust nur zu 👀</div>'; return; }
+  const myTurn = st.phase==="play" && !st.jokerSwap && st.players[st.turn] && st.players[st.turn].id===ME_ID && !me.out;
+  const src = me.hand.length?"hand":(st.deck.length?"hand":(me.open.length?"open":"blind"));
+
+  /* offene + verdeckte */
+  const g1=document.createElement("div"); g1.className="grp";
+  g1.innerHTML='<div class="lbl">Offen</div>';
+  const c1=document.createElement("div"); c1.className="cards";
+  me.open.forEach((c,i)=>{
+    const el=mkCard(c,"mid");
+    if(st.phase==="swap" && !me.ready){
+      el.onclick=()=>{ if(swapPickHand!=null){ sendAct({type:"swap",hi:swapPickHand,oi:i}); swapPickHand=null; } else toast("Erst eine Handkarte antippen, dann die offene Karte."); };
+    } else if(myTurn && src==="open"){
+      el.onclick=()=>{ toggleSel(i); };
+      if(sel.includes(i)) el.classList.add("sel");
+    }
+    c1.appendChild(el);
+  });
+  g1.appendChild(c1); mt.appendChild(g1);
+  const g2=document.createElement("div"); g2.className="grp";
+  g2.innerHTML='<div class="lbl">Verdeckt</div>';
+  const c2=document.createElement("div"); c2.className="cards";
+  me.blind.forEach((c,i)=>{
+    const el=mkCard(null,"mid");
+    if(myTurn && src==="blind"){
+      el.style.borderColor="var(--gold)";
+      el.onclick=()=>{ if(confirm("Diese verdeckte Karte blind spielen?")) sendAct({type:"playBlind", i}); };
+    }
+    c2.appendChild(el);
+  });
+  g2.appendChild(c2); mt.appendChild(g2);
+
+  /* Hand */
+  const sorted=me.hand.map((c,i)=>({c,i})).sort((a,b)=>a.c.v-b.c.v);
+  sorted.forEach(({c,i})=>{
+    const el=mkCard(c);
+    if(st.phase==="swap" && !me.ready){
+      if(swapPickHand===i) el.classList.add("sel");
+      el.onclick=()=>{ swapPickHand=(swapPickHand===i?null:i); render(S); };
+    } else if(myTurn && src==="hand"){
+      if(sel.includes(i)) el.classList.add("sel");
+      el.onclick=()=>toggleSel(i);
+    } else if(st.phase==="play"){ el.classList.add("disabled"); }
+    mh.appendChild(el);
+  });
+  if(!me.hand.length && st.phase==="play"){
+    mh.innerHTML='<div style="color:var(--dim);font-size:.8rem;padding:14px 6px">'+(src==="open"?"Spiele deine offenen Karten!":"Hand leer – "+(src==="blind"?"blind ziehen!":""))+'</div>';
+  }
+
+  /* Buttons */
+  if(st.phase==="swap"){
+    const b=document.createElement("button");
+    b.textContent=me.ready?"Warte auf andere …":"✔ Bereit";
+    b.disabled=!!me.ready;
+    b.onclick=()=>{ sendAct({type:"ready"}); };
+    ab.appendChild(b);
+  } else if(st.phase==="play" && !me.out){
+    const bp=document.createElement("button");
+    bp.textContent="Spielen";
+    const arr = src==="hand"?me.hand:me.open;
+    const ok = myTurn && src!=="blind" && sel.length && sel.every(i=>arr[i]!=null) &&
+               sel.every(i=>arr[i].v===arr[sel[0]].v) && beats(arr[sel[0]]?arr[sel[0]].v:0, st);
+    bp.disabled=!ok;
+    bp.onclick=()=>{ const t=sel.slice(); sel=[]; sendAct({type:src==="hand"?"play":"playOpen", idxs:t}); };
+    ab.appendChild(bp);
+    const bu=document.createElement("button"); bu.className="sec";
+    bu.textContent="Stapel aufnehmen";
+    bu.disabled=!(myTurn && st.pile.length && src!=="blind");
+    bu.onclick=()=>{ sel=[]; sendAct({type:"pickup"}); };
+    ab.appendChild(bu);
+  } else if(me.out){
+    ab.innerHTML='<div style="text-align:center;width:100%;color:var(--ok);font-weight:700;padding:6px">Du bist fertig! 🎉</div>';
+  }
+}
+function beats(v,st){
+  const t=st.pile[st.pile.length-1];
+  const eff=(!t||t.v===2||t.v===15)?0:t.v;
+  return v===2||v===10||v===15||v>=eff;
+}
+function toggleSel(i){
+  const me=myP(S); if(!me) return;
+  const src=me.hand.length?"hand":(S.deck.length?"hand":(me.open.length?"open":"blind"));
+  const arr=src==="hand"?me.hand:me.open;
+  if(sel.includes(i)) sel=sel.filter(x=>x!==i);
+  else{
+    if(sel.length && arr[sel[0]] && arr[i] && arr[sel[0]].v!==arr[i].v) sel=[];
+    sel.push(i);
+  }
+  render(S);
+}
+function esc(s){ return String(s).replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c])); }
+
+/* ===== Joker-Modal ===== */
+function openJokerModal(st){
+  const g=$("joker-grid"); g.innerHTML="";
+  st.players.forEach(p=>{
+    if(!p.open.length) return;
+    const box=document.createElement("div");
+    box.innerHTML='<div style="font-size:.8rem;color:var(--dim);margin-bottom:4px">'+esc(p.name)+(p.id===ME_ID?" (du)":"")+'</div>';
+    const cs=document.createElement("div"); cs.className="row";
+    p.open.forEach((c,idx)=>{
+      const el=mkCard(c,"mid");
+      const key=p.id+"#"+idx;
+      if(jokerPicks.some(k=>k.key===key)) el.classList.add("swapsel");
+      el.onclick=()=>{
+        const ix=jokerPicks.findIndex(k=>k.key===key);
+        if(ix>=0) jokerPicks.splice(ix,1);
+        else{ if(jokerPicks.length>=2) jokerPicks.shift(); jokerPicks.push({key,pid:p.id,idx}); }
+        openJokerModal(st);
+      };
+      cs.appendChild(el);
+    });
+    box.appendChild(cs); g.appendChild(box);
+  });
+  $("btn-joker-do").disabled=jokerPicks.length!==2;
+  $("ovl-joker").classList.add("on");
+}
+$("btn-joker-do").onclick=()=>{ if(jokerPicks.length===2){ sendAct({type:"jokerswap", a:{pid:jokerPicks[0].pid,idx:jokerPicks[0].idx}, b:{pid:jokerPicks[1].pid,idx:jokerPicks[1].idx}}); jokerPicks=[]; $("ovl-joker").classList.remove("on"); } };
+$("btn-joker-skip").onclick=()=>{ jokerPicks=[]; $("ovl-joker").classList.remove("on"); sendAct({type:"jokerskip"}); };
+
+/* ===== Ende ===== */
+function renderEnd(st){
+  const o=$("ovl-end"); o.classList.add("on");
+  const r=$("end-ranking"); r.innerHTML="";
+  st.ranks.forEach((n,i)=>{
+    const li=document.createElement("li");
+    li.textContent=n + (i===0?" 🏆":"");
+    if(i===0) li.className="rank1";
+    r.appendChild(li);
+  });
+  $("end-knck").textContent="🍞💩 Knäckebrot: "+(st.knck||"–");
+  $("btn-rematch").style.display=IS_HOST?"block":"none";
+  $("end-wait").style.display=IS_HOST?"none":"block";
+}
+$("btn-rematch").onclick=()=>{ if(IS_HOST&&HS){ deal(); publishState(); } };
+
+/* ================= Start-Screen-Logik ================= */
+function myName(){
+  const n=$("inp-name").value.trim();
+  if(!n){ toast("Sag mir erst deinen Namen 🙂"); return null; }
+  localStorage.kb_name=n; return n;
+}
+function randCode(bkey){
+  const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s="";
+  for(let i=0;i<4;i++) s+=A[Math.floor(Math.random()*A.length)];
+  return bkey+s;
+}
+$("btn-create").onclick=()=>{
+  const n=myName(); if(!n) return;
+  keepAwake();
+  IS_HOST=true;
+  connect(0,(c,bi)=>{
+    ROOM=randCode(BROKERS[bi].key);
+    HS={phase:"lobby", code:ROOM, jokerOn:$("chk-joker")?$("chk-joker").checked:true,
+        players:[newPlayer(ME_ID,n)], deck:[], pile:[], turn:0, ranks:[], log:"", jokerSwap:null};
+    resubscribe();
+    publishState();
+    show("scr-lobby"); renderLobby(HS);
+  }, true);
+};
+$("btn-join").onclick=()=>{
+  const n=myName(); if(!n) return;
+  const code=$("inp-code").value.trim().toUpperCase();
+  if(code.length!==5){ toast("Der Code hat 5 Zeichen."); return; }
+  joinRoom(code,n);
+};
+function joinRoom(code,n){
+  keepAwake();
+  IS_HOST=false; ROOM=code;
+  const bi=Math.max(0,BROKERS.findIndex(b=>b.key===code[0]));
+  connect(bi,()=>{
+    resubscribe();
+    let tries=0;
+    const iv=setInterval(()=>{
+      if(S && S.players && S.players.some(p=>p.id===ME_ID)){ clearInterval(iv); return; }
+      if(++tries>15){ clearInterval(iv); toast("Kein Spiel mit diesem Code gefunden 🤔"); return; }
+      pub(T_ACT(ROOM),{type:"join",aid:uuid(),pid:ME_ID,name:n},false);
+    },1500);
+    pub(T_ACT(ROOM),{type:"join",aid:uuid(),pid:ME_ID,name:n},false);
+    toast("Verbinde mit Spiel "+code+" …");
+  });
+  localStorage.kb_last=JSON.stringify({code,t:Date.now()});
+}
+$("chk-joker") && ($("chk-joker").onchange=()=>{ if(IS_HOST&&HS){ HS.jokerOn=$("chk-joker").checked; publishState(); } });
+$("btn-start").onclick=()=>{ if(IS_HOST&&HS&&HS.players.length>=2){ deal(); publishState(); } };
+
+/* Fortsetzen (Host nach Reload) */
+(function(){
+  let resume=null;
+  for(const k of Object.keys(localStorage)){
+    if(k.startsWith("kb_host_")){
+      try{ const d=JSON.parse(localStorage[k]);
+        if(Date.now()-d.t<12*3600*1000 && d.hs && d.hs.phase!=="end"){ resume={code:k.slice(8), d}; } else localStorage.removeItem(k);
+      }catch(e){ localStorage.removeItem(k); }
+    }
+  }
+  let lastJoin=null;
+  try{ const lj=JSON.parse(localStorage.kb_last||"null"); if(lj && Date.now()-lj.t<12*3600*1000) lastJoin=lj; }catch(e){}
+  const b=$("btn-resume");
+  if(resume){
+    b.style.display="block"; b.textContent="▶ Spiel "+resume.code+" fortsetzen (als Host)";
+    b.onclick=()=>{
+      IS_HOST=true; ROOM=resume.code;
+      HS=resume.d.hs; stateVersion=resume.d.sv||HS.v||0;
+      const bi=Math.max(0,BROKERS.findIndex(x=>x.key===ROOM[0]));
+      connect(bi,()=>{ resubscribe(); publishState(); });
+      keepAwake();
+    };
+  } else if(lastJoin){
+    b.style.display="block"; b.textContent="▶ Spiel "+lastJoin.code+" wieder beitreten";
+    b.onclick=()=>{ const n=myName(); if(n) joinRoom(lastJoin.code,n); };
+  }
+})();
+
+/* Tutorial */
+const tut=v=>$("ovl-tut").classList.toggle("on",v);
+$("btn-tut").onclick=()=>tut(true);
+$("btn-tut2").onclick=()=>tut(true);
+$("btn-tut3").onclick=()=>tut(true);
+$("btn-tut-close").onclick=()=>tut(false);
+</script>
+
+<!-- mqtt.js mit CDN-Fallback -->
+<script>
+(function loadMqtt(){
+  const urls=[
+    "https://unpkg.com/mqtt@5/dist/mqtt.min.js",
+    "https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"
+  ];
+  let i=0;
+  (function next(){
+    if(window.mqtt) return;
+    if(i>=urls.length){ document.getElementById("toast").textContent="Fehler: Spiel-Bibliothek konnte nicht geladen werden. Internet prüfen & neu laden."; document.getElementById("toast").style.display="block"; return; }
+    const s=document.createElement("script"); s.src=urls[i++];
+    s.onerror=next; document.head.appendChild(s);
+  })();
+})();
+</script>
+</body>
+</html>
