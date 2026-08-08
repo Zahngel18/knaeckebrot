@@ -48,21 +48,19 @@
   .card{
     width:58px; height:82px; border-radius:8px; background:var(--card); color:var(--ink);
     position:relative; box-shadow:0 2px 5px rgba(0,0,0,.45); flex:none; user-select:none;
-    display:flex; align-items:center; justify-content:center; font-weight:800;
-    border:2px solid transparent; transition:transform .12s;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    font-weight:800; border:2px solid transparent; transition:transform .12s;
   }
-  .card .cor{position:absolute; top:3px; left:5px; font-size:.78rem; line-height:1; text-align:left;}
-  .card .pip{font-size:1.7rem;}
+  .card .rk{font-size:1.65rem; line-height:1; letter-spacing:-.02em;}
+  .card .st{font-size:1.05rem; line-height:1;}
   .card.red{color:var(--red);}
   .card.joker{color:#6a1b9a;}
-  .card.joker .pip{font-size:1.9rem;}
   .card.sel{transform:translateY(-12px); border-color:var(--accent); box-shadow:0 0 0 2px var(--accent),0 6px 10px rgba(0,0,0,.5);}
   .card.back{background:repeating-linear-gradient(45deg,#7a1f2b 0 6px,#8d2b38 6px 12px); border:3px solid #fdfdf8;}
-  .card.mini{width:30px; height:43px; border-radius:5px;}
-  .card.mini .cor{display:none;}
-  .card.mini .pip{font-size:.95rem;}
-  .card.mid{width:44px; height:62px;}
-  .card.mid .pip{font-size:1.2rem;} .card.mid .cor{font-size:.65rem;}
+  .card.mini{width:34px; height:48px; border-radius:5px;}
+  .card.mini .rk{font-size:1.02rem;} .card.mini .st{font-size:.7rem;}
+  .card.mid{width:46px; height:64px;}
+  .card.mid .rk{font-size:1.3rem;} .card.mid .st{font-size:.85rem;}
   .card.disabled{opacity:.45;}
   .fan{display:flex; flex-wrap:wrap; gap:6px; justify-content:center;}
   .hand-scroll{display:flex; gap:6px; overflow-x:auto; padding:14px 4px 6px; -webkit-overflow-scrolling:touch;}
@@ -283,10 +281,10 @@ function mkCard(c, cls){
   const d=document.createElement("div");
   d.className="card "+(cls||"");
   if(c===null){ d.classList.add("back"); return d; }
-  if(c.v===15){ d.classList.add("joker"); d.innerHTML='<span class="pip">🃏</span>'; return d; }
-  const r=(c.s===1||c.s===2); if(r) d.classList.add("red");
+  if(c.v===15){ d.classList.add("joker"); d.innerHTML='<span class="rk">🃏</span>'; return d; }
+  if(c.s===1||c.s===2) d.classList.add("red");
   const v=c.v<=10?c.v:NAMES[c.v];
-  d.innerHTML='<span class="cor">'+v+'<br>'+SUITS[c.s]+'</span><span class="pip">'+SUITS[c.s]+'</span>';
+  d.innerHTML='<span class="rk">'+v+'</span><span class="st">'+SUITS[c.s]+'</span>';
   return d;
 }
 
@@ -637,6 +635,9 @@ function renderGame(st){
     const cnt=document.createElement("div"); cnt.className="cnt";
     cnt.textContent="✋ "+p.hand.length+"  🂠 "+p.blind.length+(st.phase==="swap"?(p.ready?" · bereit ✔":" · tauscht…"):"");
     d.appendChild(cnt);
+    const lbl=document.createElement("div"); lbl.className="cnt";
+    lbl.textContent=p.open.length?"offen:":(p.hand.length||p.blind.length?"keine offenen":"");
+    d.appendChild(lbl);
     const cs=document.createElement("div"); cs.className="cards";
     p.open.forEach(c=>cs.appendChild(mkCard(c,"mini")));
     d.appendChild(cs);
