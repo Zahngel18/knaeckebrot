@@ -424,7 +424,10 @@ const aText=(id,st)=> id>=0 ? (A_ALL[id]||"???") : (((st&&st.custom&&st.custom[-
 const qText=id=> id>=0 ? (Q_ALL[id]||"???") : ((((cur()||{}).cq)||[])[-id-1]||"???");   // negative IDs: Fragen mit Spielernamen
 const pickN=q=>Math.max(1,(qText(q).match(/_/g)||[]).length);
 /* Kartentext: lange Wörter dürfen getrennt werden, kurze nie („ei-nem“ sieht furchtbar aus). */
-const ct=(id,st)=>aText(id,st).split(" ").map(w=>w.length<=13?'<span class="nb">'+esc(w)+'</span>':esc(w)).join(" ");
+const ct=(id,st)=>{
+  const t=aText(id,st), dot=/[.!?…“”"]$/.test(t)?"":".";   // trockener Punkt auf der Karte, nicht in der Lücke
+  return (t+dot).split(" ").map(w=>w.length<=14?'<span class="nb">'+esc(w)+'</span>':esc(w)).join(" ");
+};
 function qHtml(q,ans,st){
   const parts=qText(q).split("_"), f=a=>'<span class="fill">'+esc(aText(a,st))+'</span>';
   if(parts.length===1) return esc(parts[0])+(ans&&ans.length?'<div class="under">'+ans.map(f).join("")+'</div>':"");
