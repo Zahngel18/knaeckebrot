@@ -17,7 +17,7 @@ Kleine Online-Spiele für die Runde am Tisch – jeder spielt auf dem eigenen Ha
 
 - Einer macht eine Runde auf und teilt den Link (AirDrop, WhatsApp) oder zeigt den QR-Code – wer den Link öffnet, sitzt direkt am Tisch
 - Jede Runde ist jemand Boss, liest die Frage vor und krönt die beste (schlimmste) Antwortkarte
-- In der Lobby: Punkte zum Sieg, „Kollege Zufall" als blinder Mitspieler, eigene Karten für Insider und das zuschaltbare „Abgrund-Paket" mit den wirklich finsteren Karten
+- In der Lobby: Punkte zum Sieg, „Kollege Zufall" als blinder Mitspieler, eigene Karten für Insider, das „Abgrund-Paket" mit den wirklich finsteren Karten und „Persönlich werden" – Karten mit den Namen der Mitspieler
 - Karten stehen in `niveaulimbo/karten.js` und lassen sich dort einfach ergänzen
 
 ## Neues Spiel hinzufügen

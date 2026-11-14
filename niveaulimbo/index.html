@@ -162,6 +162,7 @@
   .acard.sel{transform:translateY(-5px) rotate(-1.2deg); box-shadow:0 0 0 4px var(--pink), 0 12px 22px rgba(255,61,139,.5);}
   .acard .ord{position:absolute; top:-9px; right:-7px; background:var(--pink); color:#fff; border-radius:99px; width:27px; height:27px; display:grid; place-items:center; font-size:.85rem; box-shadow:0 2px 0 var(--pinkd);}
   .acard.cust::after{content:"✍️"; position:absolute; right:8px; bottom:5px; font-size:.75rem; opacity:.75;}
+  .acard.roast::after{content:"🎯"; position:absolute; right:8px; bottom:5px; font-size:.75rem; opacity:.75;}
   .hand.off .acard{opacity:.5; box-shadow:none;}
   .secl{font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); font-weight:800; margin:6px 0 8px;}
 
@@ -304,6 +305,10 @@
       <div><b>Abgrund-Paket ☠️</b><small>Die Karten, nach denen man sich fragt, ob man diese Freundschaften noch will. Aus = Runde mit Schwiegereltern.</small></div>
       <input type="checkbox" class="tog" id="chk-dark">
     </label>
+    <label class="optrow">
+      <div><b>Persönlich werden 🎯</b><small>Mischt Karten mit euren Namen in den Stapel. Ab jetzt geht es gegen die eigenen Leute.</small></div>
+      <input type="checkbox" class="tog" id="chk-roast">
+    </label>
   </div>
   <div class="panel">
     <h2>Eigene Karten ✍️</h2>
@@ -416,7 +421,7 @@ const MAXP=12, HAND=10, BOT_ID="bot";
 /* IDs: erst der Grundstapel, dahinter das Abgrund-Paket; negative IDs sind eigene Karten. */
 const Q_ALL=NL_Q.concat(NL_QX), A_ALL=NL_A.concat(NL_AX);
 const aText=(id,st)=> id>=0 ? (A_ALL[id]||"???") : (((st&&st.custom&&st.custom[-id-1])||{}).t||"???");
-const qText=id=>Q_ALL[id]||"???";
+const qText=id=> id>=0 ? (Q_ALL[id]||"???") : ((((cur()||{}).cq)||[])[-id-1]||"???");   // negative IDs: Fragen mit Spielernamen
 const pickN=q=>Math.max(1,(qText(q).match(/_/g)||[]).length);
 /* Kartentext: lange Wörter dürfen getrennt werden, kurze nie („ei-nem“ sieht furchtbar aus). */
 const ct=(id,st)=>aText(id,st).split(" ").map(w=>w.length<=13?'<span class="nb">'+esc(w)+'</span>':esc(w)).join(" ");
@@ -515,7 +520,7 @@ const cur=()=>IS_HOST?HS:S;
 const myP=st=>st.players.find(p=>p.id===ME_ID);
 
 /* ================= Host: Spiellogik ================= */
-const cleanName=n=>String(n||"").replace(/\s+/g," ").trim().slice(0,14)||"Namenlos";
+const cleanName=n=>String(n||"").replace(/[_{}]/g," ").replace(/\s+/g," ").trim().slice(0,14)||"Namenlos";
 function newPlayer(id,name){
   const used=HS?HS.players.map(p=>p.av):[];
   const av=AVS.find(a=>!used.includes(a))||AVS[Math.floor(Math.random()*AVS.length)];
@@ -523,7 +528,7 @@ function newPlayer(id,name){
 }
 function newState(code,name){
   HS=null;
-  return {phase:"lobby", code, opt:{goal:7, bot:false, dark:true}, players:[newPlayer(ME_ID,name)], custom:[], kicked:[],
+  return {phase:"lobby", code, opt:{goal:7, bot:false, dark:true, roast:true}, players:[newPlayer(ME_ID,name)], custom:[], cq:[], kicked:[],
           round:0, judge:null, q:0, subs:[], focus:-1, win:null, final:false, dq:[], da:[]};
 }
 const qIds=()=>[...Q_ALL.keys()].filter(i=>HS.opt.dark || i<NL_Q.length);
@@ -536,8 +541,22 @@ function darkFirst(ids,baseLen){
   const top=shuffle(dark.concat(base.splice(0,Math.min(base.length,dark.length))));
   return base.concat(top);                         // gezogen wird vom Ende
 }
+/* „Persönlich werden“: Vorlagen mit den Namen der Mitspieler füllen. Läuft über die eigenen Karten (by:"sys"). */
+function makeRoast(){
+  HS.custom=HS.custom.filter(c=>c.by!=="sys"); HS.cq=[];
+  if(!HS.opt.roast) return;
+  const names=shuffle(HS.players.filter(p=>!p.bot).map(p=>p.name));
+  if(!names.length) return;
+  let k=0;
+  const gen=n=>/[sßxz]$/i.test(n)?n+"’":n+"s";
+  const fill=t=>{ const n=names[k++%names.length]; return t.replace(/\{g\}/g,gen(n)).replace(/\{n\}/g,n); };
+  shuffle(NL_RA.slice()).slice(0,6+2*names.length).forEach(t=>HS.custom.push({t:fill(t), by:"sys"}));
+  shuffle(NL_RQ.slice()).slice(0,3+names.length).forEach(t=>HS.cq.push(fill(t)));
+}
 function buildDecks(){
+  makeRoast();
   HS.dq=darkFirst(qIds(),NL_Q.length);
+  HS.cq.forEach((t,i)=>HS.dq.splice(HS.dq.length-Math.floor(Math.random()*Math.min(HS.dq.length,26)),0,-(i+1)));
   const base=darkFirst(aIds(),NL_A.length);
   const zone=Math.min(base.length, HS.players.length*HAND+30);
   /* Eigene Karten landen weit oben im Stapel, damit die Insider auch wirklich früh auftauchen. */
@@ -567,7 +586,8 @@ function startGame(){
   startRound();
 }
 function toLobby(){
-  HS.phase="lobby"; HS.round=0; HS.subs=[]; HS.win=null; HS.final=false; HS.focus=-1;
+  HS.phase="lobby"; HS.round=0; HS.subs=[]; HS.win=null; HS.final=false; HS.focus=-1; HS.q=0;
+  HS.custom=HS.custom.filter(c=>c.by!=="sys"); HS.cq=[];
   HS.players.forEach(p=>{ p.score=0; p.hand=[]; });
 }
 function startRound(){
@@ -629,6 +649,7 @@ function handleAction(a){
       if([5,7,10].includes(a.goal)) HS.opt.goal=a.goal;
       if(typeof a.bot==="boolean") setBot(a.bot);
       if(typeof a.dark==="boolean") HS.opt.dark=a.dark;
+      if(typeof a.roast==="boolean") HS.opt.roast=a.roast;
       break;
     case "addcard":{
       if(HS.phase!=="lobby" || !p) return;
@@ -736,9 +757,11 @@ function renderLobby(st){
   document.querySelectorAll("#seg-goal button").forEach(b=>{ b.classList.toggle("on",+b.dataset.goal===st.opt.goal); b.disabled=!IS_HOST; });
   $("chk-bot").checked=!!st.opt.bot; $("chk-bot").disabled=!IS_HOST;
   $("chk-dark").checked=!!st.opt.dark; $("chk-dark").disabled=!IS_HOST;
+  $("chk-roast").checked=!!st.opt.roast; $("chk-roast").disabled=!IS_HOST;
   const mine=st.custom.map((c,i)=>({t:c.t,by:c.by,i})).filter(c=>c.by===ME_ID);
   $("cc-mine").innerHTML=mine.map(c=>'<span class="ccchip">'+esc(c.t)+'<button data-delcard="'+c.i+'" aria-label="Löschen">✕</button></span>').join("");
-  $("cc-count").textContent=st.custom.length ? (st.custom.length===1?"1 eigene Karte":st.custom.length+" eigene Karten")+" im Stapel" : "Noch keine eigenen Karten im Stapel.";
+  const ccN=st.custom.filter(c=>c.by!=="sys").length;
+  $("cc-count").textContent=ccN ? (ccN===1?"1 eigene Karte":ccN+" eigene Karten")+" im Stapel" : "Noch keine eigenen Karten im Stapel.";
   const n=st.players.length, b=$("btn-start");
   b.style.display=IS_HOST?"":"none";
   b.disabled=n<3;
@@ -749,7 +772,8 @@ function renderLobby(st){
 function handHtml(st,me,active,deal){
   return '<div class="hand'+(active?"":" off")+(deal?" deal":"")+'">'+me.hand.map((c,i)=>{
     const o=sel.indexOf(c);
-    return '<button class="acard'+(o>=0&&active?" sel":"")+(c<0?" cust":"")+'" '+(active?'data-card="'+c+'"':"disabled")+' style="animation-delay:'+(i*35)+'ms">'+
+    const mark=c<0 ? ((st.custom[-c-1]||{}).by==="sys"?" roast":" cust") : "";
+    return '<button class="acard'+(o>=0&&active?" sel":"")+mark+'" '+(active?'data-card="'+c+'"':"disabled")+' style="animation-delay:'+(i*35)+'ms">'+
       '<span>'+ct(c,st)+'</span>'+(o>=0&&active&&pickN(st.q)>1?'<span class="ord">'+(o+1)+'</span>':'')+'</button>';
   }).join("")+'</div>';
 }
@@ -928,6 +952,7 @@ setInterval(()=>{
 },2500);
 $("chk-bot").onchange=()=>{ if(IS_HOST) sendAct({type:"opt",bot:$("chk-bot").checked}); };
 $("chk-dark").onchange=()=>{ if(IS_HOST) sendAct({type:"opt",dark:$("chk-dark").checked}); };
+$("chk-roast").onchange=()=>{ if(IS_HOST) sendAct({type:"opt",roast:$("chk-roast").checked}); };
 function addCustom(){
   const i=$("inp-cc"), t=i.value.trim();
   if(!t) return;
