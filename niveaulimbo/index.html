@@ -300,6 +300,10 @@
       <div><b>Kollege Zufall 🎲</b><small>Spielt mit und legt jede Runde blind eine Karte. Gewinnt peinlich oft.</small></div>
       <input type="checkbox" class="tog" id="chk-bot">
     </label>
+    <label class="optrow">
+      <div><b>Abgrund-Paket ☠️</b><small>Die Karten, nach denen man sich fragt, ob man diese Freundschaften noch will. Aus = Runde mit Schwiegereltern.</small></div>
+      <input type="checkbox" class="tog" id="chk-dark">
+    </label>
   </div>
   <div class="panel">
     <h2>Eigene Karten ✍️</h2>
@@ -409,8 +413,10 @@ const QP=new URLSearchParams(location.search);
 const AVS=["😈","💀","🤡","👻","🐷","🦄","🧟","👽","🦝","🐸","🦖","🧛","🐙","🦆"];
 const MAXP=12, HAND=10, BOT_ID="bot";
 
-const aText=(id,st)=> id>=0 ? (NL_A[id]||"???") : (((st&&st.custom&&st.custom[-id-1])||{}).t||"???");
-const qText=id=>NL_Q[id]||"???";
+/* IDs: erst der Grundstapel, dahinter das Abgrund-Paket; negative IDs sind eigene Karten. */
+const Q_ALL=NL_Q.concat(NL_QX), A_ALL=NL_A.concat(NL_AX);
+const aText=(id,st)=> id>=0 ? (A_ALL[id]||"???") : (((st&&st.custom&&st.custom[-id-1])||{}).t||"???");
+const qText=id=>Q_ALL[id]||"???";
 const pickN=q=>Math.max(1,(qText(q).match(/_/g)||[]).length);
 /* Kartentext: lange Wörter dürfen getrennt werden, kurze nie („ei-nem“ sieht furchtbar aus). */
 const ct=(id,st)=>aText(id,st).split(" ").map(w=>w.length<=13?'<span class="nb">'+esc(w)+'</span>':esc(w)).join(" ");
@@ -517,13 +523,22 @@ function newPlayer(id,name){
 }
 function newState(code,name){
   HS=null;
-  return {phase:"lobby", code, opt:{goal:7, bot:false}, players:[newPlayer(ME_ID,name)], custom:[], kicked:[],
+  return {phase:"lobby", code, opt:{goal:7, bot:false, dark:true}, players:[newPlayer(ME_ID,name)], custom:[], kicked:[],
           round:0, judge:null, q:0, subs:[], focus:-1, win:null, final:false, dq:[], da:[]};
 }
-const allA=()=>[...NL_A.keys(), ...HS.custom.map((c,i)=>-(i+1))];
+const qIds=()=>[...Q_ALL.keys()].filter(i=>HS.opt.dark || i<NL_Q.length);
+const aIds=()=>[...A_ALL.keys()].filter(i=>HS.opt.dark || i<NL_A.length);
+const allA=()=>[...aIds(), ...HS.custom.map((c,i)=>-(i+1))];
+/* Mischt so, dass das Abgrund-Paket (falls an) in der oberen Stapelhälfte landet: rund jede zweite Karte ist dann finster. */
+function darkFirst(ids,baseLen){
+  const base=shuffle(ids.filter(i=>i<baseLen)), dark=ids.filter(i=>i>=baseLen);
+  if(!dark.length) return base;
+  const top=shuffle(dark.concat(base.splice(0,Math.min(base.length,dark.length))));
+  return base.concat(top);                         // gezogen wird vom Ende
+}
 function buildDecks(){
-  HS.dq=shuffle([...NL_Q.keys()]);
-  const base=shuffle([...NL_A.keys()]);            // gezogen wird vom Ende
+  HS.dq=darkFirst(qIds(),NL_Q.length);
+  const base=darkFirst(aIds(),NL_A.length);
   const zone=Math.min(base.length, HS.players.length*HAND+30);
   /* Eigene Karten landen weit oben im Stapel, damit die Insider auch wirklich früh auftauchen. */
   shuffle(HS.custom.map((c,i)=>-(i+1))).forEach(c=>base.splice(base.length-Math.floor(Math.random()*zone),0,c));
@@ -561,7 +576,7 @@ function startRound(){
   for(let k=0;k<HS.players.length;k++){ idx=(idx+1)%HS.players.length; if(!HS.players[idx].bot) break; }
   HS.judge=HS.players[idx].id;
   HS.round++;
-  if(!HS.dq.length) HS.dq=shuffle([...NL_Q.keys()].filter(q=>q!==HS.q));
+  if(!HS.dq.length) HS.dq=shuffle(qIds().filter(q=>q!==HS.q));
   HS.q=HS.dq.pop();
   HS.subs=[]; HS.focus=-1; HS.win=null; HS.final=false;
   HS.players.forEach(p=>{ if(!p.bot) while(p.hand.length<HAND) p.hand.push(drawA()); });
@@ -613,6 +628,7 @@ function handleAction(a){
       if(!fromHost || HS.phase!=="lobby") return;
       if([5,7,10].includes(a.goal)) HS.opt.goal=a.goal;
       if(typeof a.bot==="boolean") setBot(a.bot);
+      if(typeof a.dark==="boolean") HS.opt.dark=a.dark;
       break;
     case "addcard":{
       if(HS.phase!=="lobby" || !p) return;
@@ -719,6 +735,7 @@ function renderLobby(st){
     (p.id===st.hostId?'<small>Host</small>':'')+(p.id===ME_ID&&p.id!==st.hostId?'<small>du</small>':'')+'</div>').join("");
   document.querySelectorAll("#seg-goal button").forEach(b=>{ b.classList.toggle("on",+b.dataset.goal===st.opt.goal); b.disabled=!IS_HOST; });
   $("chk-bot").checked=!!st.opt.bot; $("chk-bot").disabled=!IS_HOST;
+  $("chk-dark").checked=!!st.opt.dark; $("chk-dark").disabled=!IS_HOST;
   const mine=st.custom.map((c,i)=>({t:c.t,by:c.by,i})).filter(c=>c.by===ME_ID);
   $("cc-mine").innerHTML=mine.map(c=>'<span class="ccchip">'+esc(c.t)+'<button data-delcard="'+c.i+'" aria-label="Löschen">✕</button></span>').join("");
   $("cc-count").textContent=st.custom.length ? (st.custom.length===1?"1 eigene Karte":st.custom.length+" eigene Karten")+" im Stapel" : "Noch keine eigenen Karten im Stapel.";
@@ -910,6 +927,7 @@ setInterval(()=>{
   sendAct({type:"submit", round:pend.round, cards:pend.cards, aid:pend.aid});
 },2500);
 $("chk-bot").onchange=()=>{ if(IS_HOST) sendAct({type:"opt",bot:$("chk-bot").checked}); };
+$("chk-dark").onchange=()=>{ if(IS_HOST) sendAct({type:"opt",dark:$("chk-dark").checked}); };
 function addCustom(){
   const i=$("inp-cc"), t=i.value.trim();
   if(!t) return;
